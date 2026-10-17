@@ -1,0 +1,189 @@
+[
+  {
+    "id": "JAZZ_TRITONE_SUB",
+    "profile": "jazz",
+    "purpose": "Dominant 7th akorunu triton (3 tam ton) mesafesindeki eşdeğer dominant 7th akoru ile değiştirerek yarım ton bas inişi sağlamak.",
+    "preconditions": "Akor dominant 7th niteliğinde olmalı (örneğin G7, D7, A7) ve hedef akora (genellikle 5li aşağısına veya yarım ton aşağısına) çözülüyor olmalıdır.",
+    "candidateLogicId": "generateTritoneSubstitution",
+    "scoringBehavior": "soft",
+    "weights": {
+      "guideToneRetention": 35,
+      "halfStepBassMotion": 30,
+      "voiceLeadingSmoothness": 20,
+      "adventurousPreferenceBonus": 15
+    },
+    "hardConstraints": ["Akor dominant 7th olmalıdır", "Geçerli çalınabilir gitar tabı üretilebilmelidir"],
+    "knownExceptions": "Tonik majör akorlarda veya minör toniklerde uygulanamaz. Hedef akor uyumsuz ise önerilmez.",
+    "sourceId": "open-music-theory-jazz",
+    "sourceUrl": "https://viva.pressbooks.pub/openmusictheory/chapter/jazz-voicings/",
+    "licenseStatus": "CC BY-SA 4.0 compliant, independently drafted algorithmic summary",
+    "version": "1.0.0",
+    "implementationStatus": "active"
+  },
+  {
+    "id": "JAZZ_SECONDARY_DOMINANT",
+    "profile": "jazz",
+    "purpose": "Hedef akorun 5 derece üstünden dominant 7th akoru (V7/target) araya sokarak hedefe güçlü harmonik çekim oluşturmak.",
+    "preconditions": "Hedef akor eksilmiş akor olmamalı, tonun diatonic ya da hedef derecesi olmalıdır.",
+    "candidateLogicId": "generateSecondaryDominants",
+    "scoringBehavior": "soft",
+    "weights": {
+      "circleOfFifthsMotion": 30,
+      "guideToneResolution": 25,
+      "voiceLeadingSmoothness": 25,
+      "contextFitness": 20
+    },
+    "hardConstraints": ["Geçerli çalınabilir gitar bas pozisyonu bulunmalıdır"],
+    "knownExceptions": "Hedef akor zaten aynı kök sese sahipse döngüsel tekrara yol açar.",
+    "sourceId": "open-music-theory-jazz",
+    "sourceUrl": "https://viva.pressbooks.pub/openmusictheory/part/jazz/",
+    "licenseStatus": "CC BY-SA 4.0 compliant",
+    "version": "1.0.0",
+    "implementationStatus": "active"
+  },
+  {
+    "id": "JAZZ_CHROMATIC_APPROACH",
+    "profile": "jazz",
+    "purpose": "Hedef akorun yarım ton üstünden veya altından aynı akor kalıbıyla kromatik yaklaşım geçişi yapmak.",
+    "preconditions": "İki akor arasında en az 1 tam tonluk boşluk veya kadans hareketi bulunmalıdır.",
+    "candidateLogicId": "generateChromaticApproach",
+    "scoringBehavior": "soft",
+    "weights": {
+      "parallelSmoothness": 25,
+      "halfStepApproach": 35,
+      "fretboardProximity": 25,
+      "playabilityScore": 15
+    },
+    "hardConstraints": ["Hedef akora kromatik yarım ton mesafede olmalıdır"],
+    "knownExceptions": "Aşırı melodi sıçraması yaratan geniş aralıklı akorlarda kullanılmamalıdır.",
+    "sourceId": "open-music-theory-jazz",
+    "sourceUrl": "https://viva.pressbooks.pub/openmusictheory/part/jazz/",
+    "licenseStatus": "CC BY-SA 4.0 compliant",
+    "version": "1.0.0",
+    "implementationStatus": "active"
+  },
+  {
+    "id": "JAZZ_DIM_PASSING",
+    "profile": "jazz",
+    "purpose": "Diatonik akorlar arasında yükselen eksilmiş 7li (dim7) akor yerleştirerek kromatik bas hattı ve gerilim sağlamak.",
+    "preconditions": "İlk akor ile ikinci akorun kök sesleri arasında 1 tam ton olmalı (örneğin Cmaj7 -> Dm7 arasına C#dim7).",
+    "candidateLogicId": "generateDiminishedPassing",
+    "scoringBehavior": "soft",
+    "weights": {
+      "chromaticBassLine": 40,
+      "tritoneTensionResolution": 30,
+      "voiceLeadingStepwise": 30
+    },
+    "hardConstraints": ["İlk akordan hedefe yarım ton bas tırmanışı şarttır"],
+    "knownExceptions": "Bas hattı inişte iken ters yönde kromatik gerilim yaratabilir.",
+    "sourceId": "open-music-theory-jazz",
+    "sourceUrl": "https://viva.pressbooks.pub/openmusictheory/chapter/jazz-voicings/",
+    "licenseStatus": "CC BY-SA 4.0 compliant",
+    "version": "1.0.0",
+    "implementationStatus": "active"
+  },
+  {
+    "id": "JAZZ_ALT_VOICING",
+    "profile": "jazz",
+    "purpose": "Mevcut akor için klavyede daha pürüzsüz ses iletimi sağlayan alternatif drop-2 veya rehber ses (3rd & 7th) gitar pozisyonu sunmak.",
+    "preconditions": "Akorun notaları belirlenmiş olmalıdır.",
+    "candidateLogicId": "generateAlternateVoicings",
+    "scoringBehavior": "soft",
+    "weights": {
+      "commonTonePreservation": 35,
+      "minimumFretMovement": 35,
+      "ergonomicComfort": 30
+    },
+    "hardConstraints": ["Aynı akor sembolünü ve temel aralıkları içermelidir"],
+    "knownExceptions": "Mevcut pozisyon zaten optimal ise ilave fayda sağlamaz.",
+    "sourceId": "open-music-theory-jazz",
+    "sourceUrl": "https://viva.pressbooks.pub/openmusictheory/chapter/jazz-voicings/",
+    "licenseStatus": "CC BY-SA 4.0 compliant",
+    "version": "1.0.0",
+    "implementationStatus": "active"
+  },
+  {
+    "id": "CLASSICAL_DIATONIC_SUB",
+    "profile": "classical",
+    "purpose": "Diatonik fonksiyonel uyum çerçevesinde tonik, ön-dominant veya dominant aileleri içinde yedek akor (I -> vi, IV -> ii, V -> vii°6) kullanmak.",
+    "preconditions": "Seçilen ton belirlenmiş veya tespit edilmiş olmalı, akor diatonik skalaya uymalıdır.",
+    "candidateLogicId": "generateClassicalDiatonicSubs",
+    "scoringBehavior": "soft",
+    "weights": {
+      "functionalEquivalence": 40,
+      "commonToneRetention": 30,
+      "bassMotionQuality": 20,
+      "parallelFifthOctaveAvoidance": 10
+    },
+    "hardConstraints": ["Aynı fonksiyonel aileye ait olmalıdır (Tonic, Predominant veya Dominant)"],
+    "knownExceptions": "Son kadans noktasında I yerine vi kullanımı aldatıcı kadans (deceptive cadence) yaratır.",
+    "sourceId": "classical-tonal-syntax",
+    "sourceUrl": "https://global.oup.com/ushe/product/the-complete-musician-9780190076818",
+    "licenseStatus": "Standard academic tonal theory",
+    "version": "1.0.0",
+    "implementationStatus": "active"
+  },
+  {
+    "id": "CLASSICAL_APPLIED_DOMINANT",
+    "profile": "classical",
+    "purpose": "Hedef diatonik dereceye (örneğin V, ii, vi, IV) yönelik uygulamalı dominant (V7/x) akor yerleştirerek hedefe yönelişi güçlendirmek.",
+    "preconditions": "Hedef akor eksilmiş üçlü olmamalıdır (vii° tonicize edilemez).",
+    "candidateLogicId": "generateClassicalAppliedDominants",
+    "scoringBehavior": "soft",
+    "weights": {
+      "tendencyToneResolution": 35,
+      "smoothVoiceLeading": 35,
+      "contraryMotion": 20,
+      "parallelIntervalAvoidance": 10
+    },
+    "hardConstraints": ["Hedef derecenin tam 5li üstünde majör veya dominant 7li yapıda olmalıdır"],
+    "knownExceptions": "Hedef akor tonun merkez toniği ise standart V7 olur (uygulamalı dominant değil).",
+    "sourceId": "classical-tonal-syntax",
+    "sourceUrl": "https://global.oup.com/ushe/product/the-complete-musician-9780190076818",
+    "licenseStatus": "Standard academic tonal theory",
+    "version": "1.0.0",
+    "implementationStatus": "active"
+  },
+  {
+    "id": "CLASSICAL_LEADING_TONE_PASSING",
+    "profile": "classical",
+    "purpose": "Hedef akorun yarım ton altındaki sansibl (leading-tone) eksilmiş akorunu (vii°/x veya vii°6) geçiş akoru olarak kullanarak yumuşak çözülüş elde etmek.",
+    "preconditions": "Hedef nota bir yarım ton yukarıdaki kök sese doğru çözülmelidir.",
+    "candidateLogicId": "generateClassicalLeadingTonePassing",
+    "scoringBehavior": "soft",
+    "weights": {
+      "leadingToneUpwardResolution": 40,
+      "stepwiseUpperVoices": 30,
+      "inversionSmoothness": 20,
+      "parallelAvoidance": 10
+    },
+    "hardConstraints": ["Sansibl (leading tone) hedefin kök sesine yukarı doğru 1 yarım ton çözülmelidir"],
+    "knownExceptions": "Paralel beşli ve sekizli yaratmayacak dağılım tercih edilmelidir.",
+    "sourceId": "music21-voice-leading",
+    "sourceUrl": "https://music21.org/music21docs/moduleReference/moduleVoiceLeading.html",
+    "licenseStatus": "BSD-3-Clause reference",
+    "version": "1.0.0",
+    "implementationStatus": "active"
+  },
+  {
+    "id": "CLASSICAL_INVERSION_VOICING",
+    "profile": "classical",
+    "purpose": "Birinci çevrim (6lı) akorlar kullanarak bas hattında basamaklı (stepwise) akıcı yürüyüş oluşturmak (örneğin I -> V6 -> vi).",
+    "preconditions": "Akor 3lü çevrimine elverişli olmalı ve gitar üzerinde çalınabilir bas notası bulunmalıdır.",
+    "candidateLogicId": "generateClassicalInversions",
+    "scoringBehavior": "soft",
+    "weights": {
+      "stepwiseBassLine": 45,
+      "sopranoContraryMotion": 25,
+      "rootPositionPreservation": 15,
+      "voiceLeadingCost": 15
+    },
+    "hardConstraints": ["Bas notasında akorun 3lüsü (veya 5lisi) yer almalıdır"],
+    "knownExceptions": "Son kadans notasında kök durumunda I akoru tercih edilir.",
+    "sourceId": "classical-tonal-syntax",
+    "sourceUrl": "https://global.oup.com/ushe/product/the-complete-musician-9780190076818",
+    "licenseStatus": "Standard academic tonal theory",
+    "version": "1.0.0",
+    "implementationStatus": "active"
+  }
+]

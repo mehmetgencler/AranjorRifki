@@ -1,0 +1,6 @@
+{
+  "name": "FretHarmony - Guitar Chord Entry and Notation",
+  "description": "Fast, visually clear guitar chord TAB editor with instant standard musical notation on a treble staff.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

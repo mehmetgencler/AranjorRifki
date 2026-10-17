@@ -1,0 +1,32 @@
+[
+  {
+    "id": "open-music-theory-jazz",
+    "title": "Open Music Theory: Jazz Voicings and Harmony",
+    "authors": ["Mark Gotham", "Kyle Gullings", "Chelsey Hamm", "Bryn Hughes", "Brian Jarvis", "Megan Lavengood", "John Peterson"],
+    "url": "https://viva.pressbooks.pub/openmusictheory/chapter/jazz-voicings/",
+    "license": "CC BY-SA 4.0",
+    "reuseConditions": "Attribution required, ShareAlike applies to adaptations. Rule summaries are concise, independently authored representations.",
+    "reviewed": true,
+    "notes": "Covers guide-tone voicings (3rds and 7ths), tritone substitution, secondary dominants, and chromatic approach."
+  },
+  {
+    "id": "music21-voice-leading",
+    "title": "music21 Voice Leading Reference",
+    "authors": ["Michael Scott Cuthbert", "music21 Project Contributors"],
+    "url": "https://music21.org/music21docs/moduleReference/moduleVoiceLeading.html",
+    "license": "BSD-3-Clause",
+    "reuseConditions": "Permissive open-source license. Algorithmic voice leading metrics adapted independently.",
+    "reviewed": true,
+    "notes": "Covers motion classification (contrary, oblique, parallel, similar), stepwise motion optimality, and leap minimization."
+  },
+  {
+    "id": "classical-tonal-syntax",
+    "title": "The Complete Musician: Tonal Harmony and Voice Leading",
+    "authors": ["Steven G. Laitz"],
+    "url": "https://global.oup.com/ushe/product/the-complete-musician-9780190076818",
+    "license": "Copyright Reference / Fair Use for factual music theory definitions",
+    "reuseConditions": "Standard harmonic function syntax: Tonic (I, vi), Predominant (IV, ii), Dominant (V, vii°), applied dominants, and leading-tone resolutions.",
+    "reviewed": true,
+    "notes": "Provides standard common-practice voice leading rules and tendency-tone behaviors."
+  }
+]
