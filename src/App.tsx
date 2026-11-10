@@ -29,14 +29,14 @@ export default function App() {
   const [youngsModulus, setYoungsModulus] = useState(69e9);
   const [density, setDensity] = useState(2700);
   const [poissonRatio, setPoissonRatio] = useState(0.33);
-  const [modalDamping, setModalDamping] = useState(0.028);
+  const [modalDamping, setModalDamping] = useState(0.025);
   const [inputGain, setInputGain] = useState(1.1);
 
-  const [particleCount, setParticleCount] = useState(1800);
+  const [particleCount, setParticleCount] = useState(2200);
   const [particleSize, setParticleSize] = useState(1.8);
   const [friction, setFriction] = useState(0.08);
-  const [restitution, setRestitution] = useState(0.72);
-  const [gravity, setGravity] = useState(0.65);
+  const [restitution, setRestitution] = useState(0.75);
+  const [gravity, setGravity] = useState(0.68);
   const [excitationX, setExcitationX] = useState(0.52);
   const [excitationY, setExcitationY] = useState(0.48);
   const [simSpeed, setSimSpeed] = useState(1.2);
@@ -93,9 +93,9 @@ export default function App() {
 
   useEffect(() => {
     particlesRef.current = createParticles(
-      Math.max(200, Math.min(5000, particleCount)),
+      Math.max(300, Math.min(5000, particleCount)),
       plateLength,
-      Math.floor((particleSize + 1) * 1000 + particleCount)
+      Math.floor((particleSize + 2) * 1000 + particleCount)
     );
   }, [particleCount, plateLength, particleSize]);
 
@@ -116,9 +116,9 @@ export default function App() {
 
   const ensureAudioGraph = async () => {
     if (!audioContextRef.current) {
-      const Ctx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
       if (!Ctx) {
-        throw new Error('Web Audio API is not supported in this browser.');
+        throw new Error('Web Audio API is unavailable in this browser.');
       }
       const context = new Ctx();
       const analyser = context.createAnalyser();
@@ -202,7 +202,6 @@ export default function App() {
 
       const analyser = await ensureAudioGraph();
       if (!analyser || !audioContextRef.current) return;
-
       if (!file.type.startsWith('audio/')) {
         throw new Error('Unsupported file type');
       }
@@ -212,9 +211,7 @@ export default function App() {
       audio.crossOrigin = 'anonymous';
       audio.preload = 'auto';
 
-      if (mediaSourceRef.current) {
-        mediaSourceRef.current.disconnect();
-      }
+      if (mediaSourceRef.current) mediaSourceRef.current.disconnect();
 
       const source = audioContextRef.current.createMediaElementSource(audio);
       source.connect(analyser);
@@ -256,7 +253,7 @@ export default function App() {
 
   const resetParticles = () => {
     particlesRef.current = createParticles(
-      Math.max(200, Math.min(5000, particleCount)),
+      Math.max(300, Math.min(5000, particleCount)),
       plateLength,
       Math.floor((particleSize + 2) * 1000 + particleCount)
     );
@@ -334,14 +331,12 @@ export default function App() {
         const sampleRate = audioContextRef.current.sampleRate;
         const binSize = sampleRate / analyser.fftSize;
         const bins: Array<{ freq: number; value: number }> = [];
-
         for (let i = 1; i < freqData.length * 0.45; i += 1) {
           const value = freqData[i] / 255;
           if (value > 0.08) {
             bins.push({ freq: i * binSize, value });
           }
         }
-
         const top = [...bins].sort((a, b) => b.value - a.value).slice(0, 8);
         top.forEach((bin) => detected.push(bin.freq));
 
@@ -359,7 +354,7 @@ export default function App() {
 
       for (let i = 0; i < modes.length; i += 1) {
         const mode = modes[i];
-        const couplingFactor =
+        const coupling =
           Math.abs(
             Math.sin((mode.m * Math.PI * excitationX) / plateLength) *
               Math.sin((mode.n * Math.PI * excitationY) / plateLength)
@@ -368,16 +363,16 @@ export default function App() {
         let resonanceWeight = 0;
         for (const freq of detected) {
           const delta = Math.abs(mode.frequencyHz - freq);
-          resonanceWeight += Math.exp(-(delta * delta) / (Math.max(30, mode.frequencyHz * 0.18) ** 2));
+          resonanceWeight += Math.exp(-(delta * delta) / (Math.max(28, mode.frequencyHz * 0.18) ** 2));
         }
 
-        const drive = driveScale * couplingFactor * (0.35 + resonanceWeight);
         const omega = mode.omega;
+        const drive = driveScale * coupling * (0.35 + resonanceWeight);
         const damping = 2 * modalDamping * omega;
 
         if (!isRunning) {
-          modeSet.qd[i] *= 1 - dt * 3.2;
-          modeSet.q[i] *= 1 - dt * 2.7;
+          modeSet.qd[i] *= 1 - dt * 3.0;
+          modeSet.q[i] *= 1 - dt * 2.5;
           modeSet.qdd[i] = 0;
           continue;
         }
@@ -388,19 +383,31 @@ export default function App() {
         modeSet.qdd[i] = qdd;
       }
 
+      // Particle behavior: dynamic contact, bounce, settling, and emergent cluster formation.
       const particleList = particlesRef.current;
       for (let i = 0; i < particleList.length; i += 1) {
         const p = particleList[i];
         const field = evaluateField(p.x, p.y);
-        const localIntensity = Math.abs(field.acceleration) * 0.8 + Math.abs(field.displacement) * 4.5;
-        const slopeStrength = Math.min(1.4, Math.abs(field.slopeX) + Math.abs(field.slopeY));
+        const localIntensity = Math.abs(field.acceleration) * 0.9 + Math.abs(field.displacement) * 4.4;
+        const slopeStrength = Math.min(1.25, Math.abs(field.slopeX) + Math.abs(field.slopeY));
 
         const ax = (-field.slopeX * 240 * localIntensity) / (0.8 + slopeStrength);
         const ay = (-field.slopeY * 240 * localIntensity) / (0.8 + slopeStrength);
 
         p.vx += ax * dt * 60;
         p.vy += ay * dt * 60;
-        p.vz -= gravity * dt * 22;
+        p.vz -= gravity * dt * 24;
+
+        if (p.z <= 0.02) {
+          // weak settling in low-motion regions produces natural nodal accumulation
+          const settle = clamp(1.0 - localIntensity * 0.7, 0, 1);
+          p.vx *= 1 - friction * dt * (1.2 + settle * 2.6);
+          p.vy *= 1 - friction * dt * (1.2 + settle * 2.6);
+          if (localIntensity < 0.12) {
+            p.vx *= 0.975;
+            p.vy *= 0.975;
+          }
+        }
 
         p.x += p.vx * dt * 60;
         p.y += p.vy * dt * 60;
@@ -408,25 +415,23 @@ export default function App() {
 
         if (p.x < 0 || p.x > plateLength) {
           p.x = clamp(p.x, 0, plateLength);
-          p.vx *= -0.7;
+          p.vx *= -0.75;
         }
         if (p.y < 0 || p.y > plateLength) {
           p.y = clamp(p.y, 0, plateLength);
-          p.vy *= -0.7;
+          p.vy *= -0.75;
         }
 
         if (p.z <= 0) {
           p.z = 0;
-          p.vz = Math.abs(p.vz) * restitution * 0.7;
+          p.vz = Math.abs(p.vz) * restitution * 0.72;
           if (Math.abs(p.vz) < 0.015) p.vz = 0;
-          p.vx *= 1 - friction * dt * 1.5;
-          p.vy *= 1 - friction * dt * 1.5;
         }
 
-        const bounceHeight = 0.12 + Math.abs(field.displacement) * 0.25;
-        if (p.z < bounceHeight && localIntensity > 0.22) {
+        const bounceHeight = 0.1 + Math.abs(field.displacement) * 0.3;
+        if (p.z < bounceHeight && localIntensity > 0.16) {
           p.z = bounceHeight;
-          p.vz = Math.max(0.18, p.vz + Math.abs(field.acceleration) * 0.6);
+          p.vz = Math.max(0.15, p.vz + Math.abs(field.acceleration) * 0.55);
         }
       }
 
@@ -504,7 +509,7 @@ export default function App() {
             const val = Math.abs(field.displacement) * 0.25 + Math.abs(field.acceleration) * 0.75;
             if (val < 0.08) {
               ctx.beginPath();
-              ctx.arc(px + cellSize * 0.5, py + cellSize * 0.5, 1.5, 0, Math.PI * 2);
+              ctx.arc(px + cellSize * 0.5, py + cellSize * 0.5, 1.6, 0, Math.PI * 2);
               ctx.fillStyle = 'rgba(160, 230, 255, 0.6)';
               ctx.fill();
             }
