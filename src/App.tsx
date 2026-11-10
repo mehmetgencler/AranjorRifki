@@ -1,10 +1,18 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  type ChangeEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   computePlateModes,
   createParticles,
   materialPresets,
   type MaterialKey,
   type Particle,
+  type PlateMode,
 } from './chladni';
 
 type AudioMode = 'idle' | 'microphone' | 'file';
@@ -63,7 +71,7 @@ export default function App() {
 
   const materialPreset = materialPresets[material];
 
-  const modes = useMemo(
+  const modes = useMemo<PlateMode[]>(
     () =>
       computePlateModes({
         L: plateLength,
@@ -71,10 +79,8 @@ export default function App() {
         E: youngsModulus,
         density,
         nu: poissonRatio,
-        excitationX,
-        excitationY,
       }),
-    [plateLength, plateThickness, youngsModulus, density, poissonRatio, excitationX, excitationY]
+    [plateLength, plateThickness, youngsModulus, density, poissonRatio]
   );
 
   useEffect(() => {
@@ -86,38 +92,35 @@ export default function App() {
   }, [modes]);
 
   useEffect(() => {
-    const count = Math.max(200, Math.min(5000, particleCount));
-    particlesRef.current = createParticles(count, plateLength, (particleSize + 0.2) * 10);
+    particlesRef.current = createParticles(
+      Math.max(200, Math.min(5000, particleCount)),
+      plateLength,
+      Math.floor((particleSize + 1) * 1000 + particleCount)
+    );
   }, [particleCount, plateLength, particleSize]);
 
   useEffect(() => {
-    const resetAudioGraph = () => {
-      if (fileAudioRef.current) {
-        fileAudioRef.current.pause();
-        fileAudioRef.current.src = '';
-        fileAudioRef.current = null;
-      }
-      if (mediaSourceRef.current) {
-        mediaSourceRef.current.disconnect();
-        mediaSourceRef.current = null;
-      }
+    return () => {
+      if (mediaSourceRef.current) mediaSourceRef.current.disconnect();
       if (micStreamRef.current) {
         micStreamRef.current.getTracks().forEach((track) => track.stop());
-        micStreamRef.current = null;
+      }
+      if (fileAudioRef.current) {
+        fileAudioRef.current.pause();
       }
       if (audioContextRef.current) {
         audioContextRef.current.close().catch(() => undefined);
-        audioContextRef.current = null;
       }
-      analyserRef.current = null;
     };
-
-    return () => resetAudioGraph();
   }, []);
 
-  const buildAudioGraph = async () => {
+  const ensureAudioGraph = async () => {
     if (!audioContextRef.current) {
-      const context = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const Ctx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) {
+        throw new Error('Web Audio API is not supported in this browser.');
+      }
+      const context = new Ctx();
       const analyser = context.createAnalyser();
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = 0.85;
@@ -130,13 +133,17 @@ export default function App() {
     return analyserRef.current;
   };
 
-  const stopAudioFile = () => {
+  const stopFileAudio = () => {
     if (fileAudioRef.current) {
       fileAudioRef.current.pause();
       fileAudioRef.current.currentTime = 0;
       setAudioPosition(0);
     }
-    setAudioMode('idle');
+    if (mediaSourceRef.current) {
+      mediaSourceRef.current.disconnect();
+      mediaSourceRef.current = null;
+    }
+    fileAudioRef.current = null;
   };
 
   const stopMicrophone = () => {
@@ -144,11 +151,10 @@ export default function App() {
       micStreamRef.current.getTracks().forEach((track) => track.stop());
       micStreamRef.current = null;
     }
-    setAudioMode('idle');
   };
 
   const stopAudio = () => {
-    stopAudioFile();
+    stopFileAudio();
     stopMicrophone();
     setAudioMode('idle');
   };
@@ -156,12 +162,12 @@ export default function App() {
   const handleMicrophone = async () => {
     try {
       setAudioError('');
-      const analyser = await buildAudioGraph();
-      if (!analyser) return;
+      stopFileAudio();
+      stopMicrophone();
 
-      stopAudioFile();
-      if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach((track) => track.stop());
+      const analyser = await ensureAudioGraph();
+      if (!analyser || !audioContextRef.current) {
+        return;
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -172,31 +178,33 @@ export default function App() {
         },
       });
 
-      const source = audioContextRef.current!.createMediaStreamSource(stream);
+      const source = audioContextRef.current.createMediaStreamSource(stream);
       source.connect(analyser);
-      analyser.connect(audioContextRef.current!.destination);
+      analyser.connect(audioContextRef.current.destination);
       micStreamRef.current = stream;
       setAudioMode('microphone');
       setIsRunning(true);
     } catch (error) {
       console.error(error);
-      setAudioError('Microphone access was denied or is unavailable in this browser.');
+      setAudioError('Microphone access was denied or unavailable in this browser.');
       setAudioMode('idle');
     }
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     try {
       setAudioError('');
-      const analyser = await buildAudioGraph();
-      if (!analyser) return;
+      stopFileAudio();
+      stopMicrophone();
 
-      if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach((track) => track.stop());
-        micStreamRef.current = null;
+      const analyser = await ensureAudioGraph();
+      if (!analyser || !audioContextRef.current) return;
+
+      if (!file.type.startsWith('audio/')) {
+        throw new Error('Unsupported file type');
       }
 
       const src = URL.createObjectURL(file);
@@ -204,17 +212,13 @@ export default function App() {
       audio.crossOrigin = 'anonymous';
       audio.preload = 'auto';
 
-      if (fileAudioRef.current) {
-        fileAudioRef.current.pause();
-      }
-
       if (mediaSourceRef.current) {
         mediaSourceRef.current.disconnect();
       }
 
-      const source = audioContextRef.current!.createMediaElementSource(audio);
+      const source = audioContextRef.current.createMediaElementSource(audio);
       source.connect(analyser);
-      analyser.connect(audioContextRef.current!.destination);
+      analyser.connect(audioContextRef.current.destination);
       mediaSourceRef.current = source;
       fileAudioRef.current = audio;
 
@@ -228,7 +232,7 @@ export default function App() {
       await audio.play();
     } catch (error) {
       console.error(error);
-      setAudioError('The selected file could not be decoded or is not supported by this browser.');
+      setAudioError('The selected audio file could not be decoded or is not supported by this browser.');
       setAudioMode('idle');
     }
   };
@@ -254,7 +258,7 @@ export default function App() {
     particlesRef.current = createParticles(
       Math.max(200, Math.min(5000, particleCount)),
       plateLength,
-      (particleSize + 0.2) * 10 + 77
+      Math.floor((particleSize + 2) * 1000 + particleCount)
     );
     qRef.current = {
       q: new Array(modes.length).fill(0),
@@ -274,12 +278,10 @@ export default function App() {
       const phi =
         Math.sin((mode.m * Math.PI * x) / plateLength) *
         Math.sin((mode.n * Math.PI * y) / plateLength);
-
       const dPhiDx =
         (mode.m * Math.PI / plateLength) *
         Math.cos((mode.m * Math.PI * x) / plateLength) *
         Math.sin((mode.n * Math.PI * y) / plateLength);
-
       const dPhiDy =
         (mode.n * Math.PI / plateLength) *
         Math.sin((mode.m * Math.PI * x) / plateLength) *
@@ -307,8 +309,8 @@ export default function App() {
       const analyser = analyserRef.current;
       let rms = 0;
       let peak = 0;
-      const currentPeaks: number[] = [];
-      const currentSpectrum = new Array(64).fill(0);
+      const freqBins = new Array(64).fill(0);
+      const detected: number[] = [];
 
       if (analyser && audioContextRef.current) {
         const timeData = new Uint8Array(analyser.fftSize);
@@ -316,75 +318,74 @@ export default function App() {
         analyser.getByteTimeDomainData(timeData);
         analyser.getByteFrequencyData(freqData);
 
-        let timeSum = 0;
+        let sumSq = 0;
         for (let i = 0; i < timeData.length; i += 1) {
-          const normalized = (timeData[i] - 128) / 128;
-          timeSum += normalized * normalized;
+          const norm = (timeData[i] - 128) / 128;
+          sumSq += norm * norm;
         }
-        rms = Math.sqrt(timeSum / timeData.length);
-        peak = Math.max(...Array.from(timeData).map((v) => Math.abs(v - 128) / 128));
+        rms = Math.sqrt(sumSq / timeData.length);
+        peak = Math.max(...Array.from(timeData, (value) => Math.abs(value - 128) / 128));
 
-        for (let i = 0; i < currentSpectrum.length; i += 1) {
-          const index = Math.floor((i / currentSpectrum.length) * freqData.length);
-          currentSpectrum[i] = freqData[index] / 255;
+        for (let i = 0; i < freqBins.length; i += 1) {
+          const idx = Math.floor((i / freqBins.length) * freqData.length);
+          freqBins[i] = freqData[idx] / 255;
         }
 
         const sampleRate = audioContextRef.current.sampleRate;
         const binSize = sampleRate / analyser.fftSize;
-        const bins: { freq: number; value: number }[] = [];
+        const bins: Array<{ freq: number; value: number }> = [];
 
         for (let i = 1; i < freqData.length * 0.45; i += 1) {
-          const val = freqData[i] / 255;
-          if (val > 0.08) {
-            bins.push({ freq: i * binSize, value: val });
+          const value = freqData[i] / 255;
+          if (value > 0.08) {
+            bins.push({ freq: i * binSize, value });
           }
         }
 
-        const sorted = [...bins].sort((a, b) => b.value - a.value).slice(0, 8);
-        currentPeaks.push(...sorted.map((bin) => bin.freq));
+        const top = [...bins].sort((a, b) => b.value - a.value).slice(0, 8);
+        top.forEach((bin) => detected.push(bin.freq));
 
         if (time - uiUpdateRef.current > 80) {
-          setSpectrum(currentSpectrum);
-          setDomFreqs(currentPeaks.slice(0, 6));
+          setSpectrum(freqBins);
+          setDomFreqs(detected.slice(0, 6));
           setPeakAmplitude(peak);
           setRmsAmplitude(rms);
           uiUpdateRef.current = time;
         }
       }
 
-      const amplitude = (rms * 1.6 + peak * 1.2) * inputGain;
+      const driveScale = (rms * 1.4 + peak * 1.6) * inputGain;
       const modeSet = qRef.current;
 
       for (let i = 0; i < modes.length; i += 1) {
         const mode = modes[i];
-        const coupling =
+        const couplingFactor =
           Math.abs(
             Math.sin((mode.m * Math.PI * excitationX) / plateLength) *
               Math.sin((mode.n * Math.PI * excitationY) / plateLength)
-          ) + 0.15;
+          ) + 0.12;
 
-        let modeWeight = 0;
-        for (const peakFreq of currentPeaks) {
-          const delta = Math.abs(mode.frequencyHz - peakFreq);
-          modeWeight += Math.exp(-(delta * delta) / (Math.max(18, mode.frequencyHz * 0.18) ** 2));
+        let resonanceWeight = 0;
+        for (const freq of detected) {
+          const delta = Math.abs(mode.frequencyHz - freq);
+          resonanceWeight += Math.exp(-(delta * delta) / (Math.max(30, mode.frequencyHz * 0.18) ** 2));
         }
 
-        const effectiveDrive = amplitude * coupling * (0.28 + modeWeight) * 0.9;
+        const drive = driveScale * couplingFactor * (0.35 + resonanceWeight);
         const omega = mode.omega;
-        const qdd =
-          -2 * modalDamping * omega * modeSet.qd[i] -
-          omega * omega * modeSet.q[i] +
-          effectiveDrive * 26;
+        const damping = 2 * modalDamping * omega;
 
         if (!isRunning) {
           modeSet.qd[i] *= 1 - dt * 3.2;
-          modeSet.q[i] *= 1 - dt * 2.6;
+          modeSet.q[i] *= 1 - dt * 2.7;
           modeSet.qdd[i] = 0;
-        } else {
-          modeSet.qd[i] += qdd * dt * 60;
-          modeSet.q[i] += modeSet.qd[i] * dt * 60;
-          modeSet.qdd[i] = qdd;
+          continue;
         }
+
+        const qdd = -damping * modeSet.qd[i] - omega * omega * modeSet.q[i] + drive * 24;
+        modeSet.qd[i] += qdd * dt * 60;
+        modeSet.q[i] += modeSet.qd[i] * dt * 60;
+        modeSet.qdd[i] = qdd;
       }
 
       const particleList = particlesRef.current;
@@ -394,20 +395,8 @@ export default function App() {
         const localIntensity = Math.abs(field.acceleration) * 0.8 + Math.abs(field.displacement) * 4.5;
         const slopeStrength = Math.min(1.4, Math.abs(field.slopeX) + Math.abs(field.slopeY));
 
-        let ax = (-field.slopeX * 240 * localIntensity) / (0.8 + slopeStrength);
-        let ay = (-field.slopeY * 240 * localIntensity) / (0.8 + slopeStrength);
-
-        if (p.z <= 0.06) {
-          ax += (Math.random() - 0.5) * 0.03;
-          ay += (Math.random() - 0.5) * 0.03;
-          p.vx *= 1 - friction * dt * 1.6;
-          p.vy *= 1 - friction * dt * 1.6;
-
-          if (localIntensity < 0.15) {
-            p.vx *= 0.96;
-            p.vy *= 0.96;
-          }
-        }
+        const ax = (-field.slopeX * 240 * localIntensity) / (0.8 + slopeStrength);
+        const ay = (-field.slopeY * 240 * localIntensity) / (0.8 + slopeStrength);
 
         p.vx += ax * dt * 60;
         p.vy += ay * dt * 60;
@@ -428,56 +417,58 @@ export default function App() {
 
         if (p.z <= 0) {
           p.z = 0;
-          p.vz = Math.abs(p.vz) * restitution * 0.65;
-          if (Math.abs(p.vz) < 0.01) p.vz = 0;
+          p.vz = Math.abs(p.vz) * restitution * 0.7;
+          if (Math.abs(p.vz) < 0.015) p.vz = 0;
+          p.vx *= 1 - friction * dt * 1.5;
+          p.vy *= 1 - friction * dt * 1.5;
         }
 
-        const BOUNCE_HEIGHT = 0.12 + Math.abs(field.displacement) * 0.22;
-        if (p.z < BOUNCE_HEIGHT && localIntensity > 0.2) {
-          p.z = BOUNCE_HEIGHT;
-          p.vz = Math.max(0.2, p.vz + Math.abs(field.acceleration) * 0.8);
+        const bounceHeight = 0.12 + Math.abs(field.displacement) * 0.25;
+        if (p.z < bounceHeight && localIntensity > 0.22) {
+          p.z = bounceHeight;
+          p.vz = Math.max(0.18, p.vz + Math.abs(field.acceleration) * 0.6);
         }
       }
 
       const width = canvas.width;
       const height = canvas.height;
       const pad = width * 0.1;
-      const size = width - pad * 2;
-      const platePx = size;
+      const platePx = width - pad * 2;
       const plateLeft = (width - platePx) / 2;
       const plateTop = (height - platePx) / 2;
 
       ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = '#0d1116';
+      ctx.fillStyle = '#0a0e13';
       ctx.fillRect(0, 0, width, height);
 
-      ctx.fillStyle = '#1d232b';
+      ctx.fillStyle = '#171d24';
       ctx.fillRect(plateLeft, plateTop, platePx, platePx);
-      ctx.strokeStyle = '#9ca9b6';
+      ctx.strokeStyle = '#aeb9c7';
       ctx.lineWidth = 2;
       ctx.strokeRect(plateLeft, plateTop, platePx, platePx);
 
       if (showDisplacement) {
         const cells = 18;
         const cellSize = platePx / cells;
-        const maxAmp = Math.max(0.0001, ...Array.from({ length: cells * cells }, (_, index) => {
-          const cx = index % cells;
-          const cy = Math.floor(index / cells);
-          const x = (cx + 0.5) * cellSize + plateLeft;
-          const y = (cy + 0.5) * cellSize + plateTop;
-          return Math.abs(evaluateField((x - plateLeft) / platePx * plateLength, (y - plateTop) / platePx * plateLength).displacement);
-        }));
+        const maxAmp = Math.max(
+          0.0001,
+          ...Array.from({ length: cells * cells }, (_, index) => {
+            const px = index % cells;
+            const py = Math.floor(index / cells);
+            const x = ((px + 0.5) / cells) * plateLength;
+            const y = ((py + 0.5) / cells) * plateLength;
+            return Math.abs(evaluateField(x, y).displacement);
+          })
+        );
 
         for (let ix = 0; ix < cells; ix += 1) {
           for (let iy = 0; iy < cells; iy += 1) {
             const px = plateLeft + ix * cellSize;
             const py = plateTop + iy * cellSize;
-            const field = evaluateField(
-              ((px - plateLeft) / platePx) * plateLength,
-              ((py - plateTop) / platePx) * plateLength
-            );
-            const amt = clamp(Math.abs(field.displacement) / maxAmp, 0, 1);
-            ctx.fillStyle = `rgba(${90 + amt * 120}, ${110 + amt * 90}, 180, ${0.18 + amt * 0.38})`;
+            const x = ((ix + 0.5) / cells) * plateLength;
+            const y = ((iy + 0.5) / cells) * plateLength;
+            const level = clamp(Math.abs(evaluateField(x, y).displacement) / maxAmp, 0, 1);
+            ctx.fillStyle = `rgba(${80 + level * 110}, ${100 + level * 100}, ${180 + level * 60}, ${0.18 + level * 0.35})`;
             ctx.fillRect(px, py, cellSize, cellSize);
           }
         }
@@ -490,12 +481,11 @@ export default function App() {
           for (let iy = 0; iy < cells; iy += 1) {
             const px = plateLeft + ix * cellSize;
             const py = plateTop + iy * cellSize;
-            const field = evaluateField(
-              ((px - plateLeft) / platePx) * plateLength,
-              ((py - plateTop) / platePx) * plateLength
-            );
-            const active = Math.min(1, (Math.abs(field.acceleration) + Math.abs(field.displacement) * 3) * 0.7);
-            ctx.fillStyle = `rgba(255, ${180 + active * 55}, ${120 + active * 90}, ${0.08 + active * 0.24})`;
+            const x = ((ix + 0.5) / cells) * plateLength;
+            const y = ((iy + 0.5) / cells) * plateLength;
+            const field = evaluateField(x, y);
+            const active = clamp((Math.abs(field.acceleration) + Math.abs(field.displacement) * 3) * 0.9, 0, 1);
+            ctx.fillStyle = `rgba(255, ${180 + active * 45}, ${120 + active * 90}, ${0.06 + active * 0.25})`;
             ctx.fillRect(px, py, cellSize, cellSize);
           }
         }
@@ -504,21 +494,18 @@ export default function App() {
       if (showNodalOverlay) {
         const cells = 20;
         const cellSize = platePx / cells;
-        ctx.strokeStyle = 'rgba(150, 220, 255, 0.38)';
-        ctx.lineWidth = 1;
         for (let ix = 0; ix < cells; ix += 1) {
           for (let iy = 0; iy < cells; iy += 1) {
             const px = plateLeft + ix * cellSize;
             const py = plateTop + iy * cellSize;
-            const center = evaluateField(
-              ((px + cellSize / 2 - plateLeft) / platePx) * plateLength,
-              ((py + cellSize / 2 - plateTop) / platePx) * plateLength
-            );
-            const val = Math.abs(center.displacement) * 0.2 + Math.abs(center.acceleration) * 0.8;
+            const x = ((ix + 0.5) / cells) * plateLength;
+            const y = ((iy + 0.5) / cells) * plateLength;
+            const field = evaluateField(x, y);
+            const val = Math.abs(field.displacement) * 0.25 + Math.abs(field.acceleration) * 0.75;
             if (val < 0.08) {
               ctx.beginPath();
-              ctx.arc(px + cellSize * 0.5, py + cellSize * 0.5, 1.3, 0, Math.PI * 2);
-              ctx.fillStyle = 'rgba(155, 240, 255, 0.5)';
+              ctx.arc(px + cellSize * 0.5, py + cellSize * 0.5, 1.5, 0, Math.PI * 2);
+              ctx.fillStyle = 'rgba(160, 230, 255, 0.6)';
               ctx.fill();
             }
           }
@@ -527,7 +514,7 @@ export default function App() {
 
       const trailAlpha = clamp(particleTrail, 0, 1);
       if (trailAlpha > 0) {
-        ctx.fillStyle = `rgba(9, 14, 18, ${Math.max(0.08, 0.92 - trailAlpha)})`;
+        ctx.fillStyle = `rgba(6, 9, 12, ${Math.max(0.15, 0.9 - trailAlpha)})`;
         ctx.fillRect(plateLeft - 2, plateTop - 2, platePx + 4, platePx + 4);
       }
 
@@ -537,40 +524,50 @@ export default function App() {
         const px = plateLeft + (p.x / plateLength) * platePx;
         const py = plateTop + (p.y / plateLength) * platePx;
         const local = evaluateField(p.x, p.y);
-        const glow = clamp(Math.abs(local.acceleration) * 0.8 + Math.abs(local.displacement) * 2.6, 0, 1);
-
+        const glow = clamp(Math.abs(local.acceleration) * 0.8 + Math.abs(local.displacement) * 2.4, 0, 1);
         ctx.beginPath();
         ctx.fillStyle = densityVisualization
-          ? `rgba(${150 + glow * 80}, ${200 + glow * 35}, 255, ${0.8 + glow * 0.2})`
-          : `rgba(230, 236, 242, ${0.9 - glow * 0.2})`;
+          ? `rgba(${150 + glow * 80}, ${200 + glow * 35}, 255, ${0.75 + glow * 0.25})`
+          : `rgba(232, 236, 242, ${0.9 - glow * 0.2})`;
         ctx.arc(px, py, particleRadius * (0.7 + glow * 0.5), 0, Math.PI * 2);
         ctx.fill();
       }
 
-      const rawAudio = analyser && audioContextRef.current ? `${rms.toFixed(3)} / ${peak.toFixed(3)}` : '0.000 / 0.000';
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
       ctx.font = '12px sans-serif';
-      ctx.fillText(rawAudio, plateLeft + 14, plateTop + 18);
+      ctx.fillText(`${rms.toFixed(3)} / ${peak.toFixed(3)}`, plateLeft + 14, plateTop + 18);
 
       animationFrameRef.current = requestAnimationFrame(render);
     };
 
     animationFrameRef.current = requestAnimationFrame(render);
-
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [modes, material, isRunning, simSpeed, particleTrail, densityVisualization, particleSize, plateLength, friction, restitution, gravity, inputGain, excitationX, excitationY, showDisplacement, showIntensity, showNodalOverlay]);
+  }, [
+    modes,
+    isRunning,
+    simSpeed,
+    particleTrail,
+    densityVisualization,
+    particleSize,
+    plateLength,
+    friction,
+    restitution,
+    gravity,
+    inputGain,
+    excitationX,
+    excitationY,
+    showDisplacement,
+    showIntensity,
+    showNodalOverlay,
+    modalDamping,
+  ]);
 
   const activeModes = modes
     .map((mode, index) => ({ ...mode, index }))
-    .filter((mode) => {
-      const qAmp = Math.abs(qRef.current.q[mode.index]);
-      return qAmp > 0.02;
-    })
+    .filter((mode) => Math.abs(qRef.current.q[mode.index]) > 0.02)
     .slice(0, 8);
-
-  const primaryFrequencies = activeModes.map((mode) => mode.frequencyHz);
 
   return (
     <div className="min-h-screen bg-[#0a0d11] text-slate-100">
@@ -676,7 +673,7 @@ export default function App() {
                   <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
                     <div className="mb-3 flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-slate-400">
                       <span>Playback</span>
-                      <span>{audioDuration ? `${(audioPosition / audioDuration) * 100 | 0}%` : '0%'}</span>
+                      <span>{audioDuration ? `${Math.floor((audioPosition / audioDuration) * 100)}%` : '0%'}</span>
                     </div>
                     <div className="mb-2 flex gap-2">
                       <button
@@ -758,7 +755,7 @@ export default function App() {
                 <ControlRow label="Thickness" value={plateThickness.toFixed(4)}>
                   <input type="range" min="0.001" max="0.02" step="0.0005" value={plateThickness} onChange={(e) => setPlateThickness(Number(e.target.value))} className="w-full accent-cyan-400" />
                 </ControlRow>
-                <ControlRow label="E" value={`${youngsModulus / 1e9} GPa`}>
+                <ControlRow label="E" value={`${(youngsModulus / 1e9).toFixed(2)} GPa`}>
                   <input type="range" min="3" max="210" step="1" value={youngsModulus / 1e9} onChange={(e) => setYoungsModulus(Number(e.target.value) * 1e9)} className="w-full accent-cyan-400" />
                 </ControlRow>
                 <ControlRow label="Density" value={`${density.toFixed(0)} kg/m³`}>
@@ -820,9 +817,9 @@ export default function App() {
 
         <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-xl shadow-slate-950/50">
           <div className="grid gap-4 lg:grid-cols-4">
-            <Metric label="Detected audio peaks" value={domFreqs.length > 0 ? domFreqs.map((freq) => formatHz(freq)).join(', ') : 'None'} />
+            <Metric label="Detected peaks" value={domFreqs.length > 0 ? domFreqs.map((freq) => formatHz(freq)).join(', ') : 'None'} />
             <Metric label="Natural frequencies" value={modes.slice(0, 5).map((mode) => formatHz(mode.frequencyHz)).join(' · ')} />
-            <Metric label="Activated modes" value={primaryFrequencies.length > 0 ? primaryFrequencies.map((freq) => formatHz(freq)).join(' · ') : 'Idle'} />
+            <Metric label="Activated modes" value={activeModes.length > 0 ? activeModes.map((mode) => formatHz(mode.frequencyHz)).join(' · ') : 'Idle'} />
             <Metric label="Particles" value={`${particlesRef.current.length}`} />
           </div>
         </section>
@@ -838,7 +835,7 @@ function ControlRow({
 }: {
   label: string;
   value: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-2.5">
@@ -885,353 +882,3 @@ function Metric({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
